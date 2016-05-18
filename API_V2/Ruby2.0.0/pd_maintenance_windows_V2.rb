@@ -27,7 +27,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Tested with Ruby 2.0.0
+# Tested with Ruby 2.0.0 and PagerDuty API V2
 # Requires rubygems (Ruby 2.0.0 comes with Rubygems)
 # Just run the following from a terminal to install the necessary gems
 # 
@@ -46,7 +46,7 @@ class PagerDutyAgent
 
   def initialize(options = {})
     @options = options
-    @connection = Faraday.new(:url => "https://#{options[:subdomain]}.pagerduty.com", 
+    @connection = Faraday.new(:url => "https://api.pagerduty.com", 
                               :ssl => {:verify => false}) do |c|
       c.request  :url_encoded
       c.response :logger
@@ -54,41 +54,43 @@ class PagerDutyAgent
     end
   end
 
-  # E.g. post("/api/v1/maintenance_windows", )
   def post(url, body = {}, headers = {})
     @connection.post do |req|
       req.url(url)
       req.headers['Content-Type'] = 'application/json'
       req.headers['Authorization'] = "Token token=#{@options[:token]}"
+      req.headers['Accept'] = "application/vnd.pagerduty+json;version=2"
+      # From is the email address of the user.
+      req.headers['From'] = EMAIL_ADDRESS
       puts JSON.generate(body)
       req.body = JSON.generate(body)
     end
   end
 
 end
+# token is the API key. Please ensure you are generating a key for the V2 API
+pd = PagerDutyAgent.new(:token => API_V2_KEY)
 
-pd = PagerDutyAgent.new(:subdomain => "SUBDOMAIN", :token => "API_KEY")
-
-# User id (the user that is putting the service in maintenance mode)
-requester_id = "REQUESTER_ID"
 # List of services that are part of this maintenance
-service_ids = ["SERVICE_ID"]
+services = [{
+  "id" => SERVICE_ID,
+  "type" => "service"
+  }]
 
-maintenance_start_time = Time.utc(2016, 11, 17, 12, 30).localtime("-08:00")
+maintenance_start_time = Time.utc(2018, 11, 17, 12, 30).localtime("-08:00")
 maintenance_end_time = maintenance_start_time + 2.hours
 
 # Recur this maintenance window for the next 20 weeks
 
 20.times do
 
-  pd.post("/api/v1/maintenance_windows", 
+  pd.post("/maintenance_windows", 
   { "maintenance_window" => {
       "start_time" => maintenance_start_time.strftime(DATE_FORMAT),
       "end_time" => maintenance_end_time.strftime(DATE_FORMAT),
       "description" => "Weekly maintenance",
-      "service_ids" => service_ids
+      "services" => services
     },
-    "requester_id" => requester_id
   })
   maintenance_start_time = maintenance_start_time + 1.week
   maintenance_end_time = maintenance_start_time + 2.hours
